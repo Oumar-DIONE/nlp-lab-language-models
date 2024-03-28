@@ -67,6 +67,18 @@ class Head(nn.Module):
         super().__init__()
         # YOUR CODE
         # add you key, query and value definitions
+        self.head_size=head_size
+
+        #self.C = 4 
+        # # YOUR CODE HERE
+        # define the Key layer  
+        self.key = nn.Linear(32, head_size)
+        # define the Query layer
+        self.query = nn.Linear(32, head_size)
+    # define the Value layer
+        self.value = nn.Linear(32, head_size)
+
+    
 
         ###
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
@@ -74,13 +86,24 @@ class Head(nn.Module):
 
 
     def forward(self, x):
-        B,T,C = x.shape
-        ## YOUR CODE HERE
-
+        B, T, C = x.shape
+        tril = torch.tril(torch.ones(T, T))
+        # # YOUR CODE HERE
+        # apply each layer to the input
+        k = self.key(x)  # (B, T, head_size)
+        q = self.query(x)  # (B, T, head_size)
+        v = self.value(x)  # (B, T, head_size)
+        # compute the normalize product between Q and K 
+        k_t = torch.transpose(k, 1, 2)
+        weights = q@k_t   # (B, T, head_size) @ (B, 16, head_size) -> (B, T, T)
+# apply the mask (lower triangular matrix)
+        weights = weights.masked_fill(tril == 0, float('-inf'))
+# apply the softmax
+        weights = nn.functional.softmax(weights, dim=-1)
+        # out  = weights @ value(x) # (B, T, head_size)
         ###
-        out = weight @ v # (B, T, T) @ (B, T, C) -> (B, T, C)
+        out = weights @ v  # (B, T, T) @ (B, T, C) -> (B, T, C)
         return out
-
 
 class BigramLanguageModel(nn.Module):
 
@@ -129,7 +152,8 @@ class BigramLanguageModel(nn.Module):
         return idx
 
 model = BigramLanguageModel()
-m = model.to(device)
+#m = model.to(device)
+m=model
 # print the number of parameters in the model
 print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 

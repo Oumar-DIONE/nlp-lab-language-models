@@ -11,6 +11,8 @@ learning_rate = 1e-3
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
 n_embd = 32
+## En tête de fichier, ajouter un paramètre  (my code here) `
+n_head = 4
 
 
 # ------------
@@ -105,14 +107,87 @@ class Head(nn.Module):
         out = weights @ v  # (B, T, T) @ (B, T, C) -> (B, T, C)
         return out
 
+
+# Ajout du module MultiHeadAttention 
+    ## YOUR CODE HERE
+
+class MultiHeadAttention(nn.Module):
+    """ multiple heads of self-attention in parallel """
+
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        ## YOUR CODE HERE
+        ## list of num_heads modules of type Head
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        ###
+        
+    def forward(self, x):
+        ## YOUR CODE HERE
+        ## apply each head in self.heads to x and concat the results 
+        out = torch.cat([h(x) for h in self.heads], dim=-1)
+
+        return out
+# Fin ajout 
+
+
+# Ajout du module FeedForward
+
+class FeedForward(nn.Module):
+    """ a simple MLP with RELU """
+
+    def __init__(self, n_embd):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embd, n_embd),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+# Fin de l'ajout du module FeedForward
+
+
+# Ajout du module Bloc 
+
+class Block(nn.Module):
+    """ A single bloc of multi-head attention """
+
+    def __init__(self, n_embd, n_head):
+        super().__init__()
+        head_size = n_embd // n_head
+        self.sa = MultiHeadAttention(n_head, head_size)
+        self.ffwd = FeedForward(n_embd)
+
+    def forward(self, x):
+        x = self.sa(x)
+        x = self.ffwd(x)
+        return x
+
+
+
+
+# fin de l'ajout du module Block
+
+
+
 class BigramLanguageModel(nn.Module):
 
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
-        self.sa_head = Head(n_embd)
+        #self.sa_head = Head(n_embd)
+        # Modification de la ligne précedente(my adding)
+        ## self.sa_head = MultiHeadAttention(n_head,n_embd) 
+        ## Modification de la ligne précedente(my adding * 2)
+        self.Block = Block(n_embd, n_head=4)
+        self.blocks = nn.Sequential(Block, Block, Block)
+        #ajout d'une couche FeedForward ((my adding))
         self.lm_head = nn.Linear(n_embd, vocab_size)
+
+#
 
     def forward(self, idx, targets=None):
         B, T = idx.shape
@@ -121,7 +196,12 @@ class BigramLanguageModel(nn.Module):
         tok_emb = self.token_embedding_table(idx) # (B,T,C)
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
         x = tok_emb + pos_emb # (B,T,C)
-        x = self.sa_head(x) # (B,T,C)
+        ##x = self.sa_head(x) # (B,T,C)
+        #ajout de la couche FeedForward (ma modification)
+        ##x=self.feedforward(x)
+    # Modifier le code de `BigramLanguageModel` pour ajouter 3 `Block(n_embd, n_head=4)` avec un container [Sequential]
+   #  à la place de `MultiHeadAttention`et `FeedForward`.
+        x=self.Block(x)
         logits = self.lm_head(x) # (B,T,vocab_size)
 
         if targets is None:
@@ -151,6 +231,10 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
         return idx
 
+
+
+
+
 model = BigramLanguageModel()
 #m = model.to(device)
 m=model
@@ -175,6 +259,7 @@ for iter in range(max_iters):
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
+
 
 
 # generate from the model
